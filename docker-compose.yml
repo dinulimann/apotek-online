@@ -1,0 +1,31 @@
+# `docker compose up -d db` gives a database for local development.
+# `docker compose --profile app up -d --build` also builds and runs the app with demo data on :8090.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: apotek
+      POSTGRES_PASSWORD: apotek
+      POSTGRES_DB: apotek
+    ports: ["5580:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apotek"]
+      interval: 2s
+      retries: 20
+
+  app:
+    profiles: [app]
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/apotek
+      SPRING_PROFILES_ACTIVE: demo
+      UPLOADS_DIR: /data/uploads
+    volumes: [uploads:/data/uploads]
+    ports: ["8090:8080"]
+
+volumes:
+  pgdata:
+  uploads:

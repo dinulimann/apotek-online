@@ -1,0 +1,41 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17, cache: maven }
+      # Integration tests start PostgreSQL with Testcontainers.
+      - run: mvn -B verify
+        working-directory: backend
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: apotek, POSTGRES_PASSWORD: apotek, POSTGRES_DB: apotek_e2e }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U apotek" --health-interval 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17, cache: maven }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: mvn -B -q -DskipTests package
+        working-directory: backend
+      - run: npm ci && npx tsc -b && npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+        env: { E2E_DATABASE_URL: "jdbc:postgresql://localhost:5432/apotek_e2e" }
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t apotek .
